@@ -1,7 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { CheckSquare, Download, PlusCircle, Search, Clock, CheckCircle2, Trash2, AlertCircle, User } from "lucide-react"
+import {
+  CheckSquare,
+  Download,
+  PlusCircle,
+  Search,
+  Clock,
+  CheckCircle2,
+  Trash2,
+  AlertCircle,
+  User,
+  Zap,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -32,10 +43,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useDynamicPendencias } from "@/hooks/use-dynamic-pendencias"
-import { DynamicStatusIndicator } from "@/components/dynamic-status-indicator"
+import { useEnhancedPendencias } from "@/hooks/use-enhanced-pendencias"
+import { EnhancedStatusIndicator } from "@/components/enhanced-status-indicator"
 
-export default function PendenciasDynamic() {
+export default function PendenciasEnhanced() {
   const { autores, fetchAutores, subscribeToAuthors } = useAppStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [dailyPassword, setDailyPassword] = useState("")
@@ -51,11 +62,12 @@ export default function PendenciasDynamic() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Hook dinâmico para pendências
+  // Hook aprimorado para pendências
   const {
     pendencias,
     isLoading,
     isConnected,
+    isPolling,
     lastUpdate,
     forceRefresh,
     addPendenciaOptimistic,
@@ -64,10 +76,11 @@ export default function PendenciasDynamic() {
     pollingInterval,
     enableRealtime,
     enablePolling,
-  } = useDynamicPendencias({
+  } = useEnhancedPendencias({
     pollingInterval: 30000, // 30 segundos
     enableRealtime: true,
     enablePolling: true,
+    showPollingToasts: false, // Não mostrar toasts para polling automático
   })
 
   // Calcular a senha diária
@@ -94,7 +107,7 @@ export default function PendenciasDynamic() {
         console.error("Error fetching authors:", error)
         toast({
           title: "Erro ao carregar autores",
-          description: "Não foi possível carregar a lista de autores. Tente novamente mais tarde.",
+          description: "Não foi possível carregar a lista de autores",
           variant: "destructive",
         })
       }
@@ -115,25 +128,34 @@ export default function PendenciasDynamic() {
         pendencia.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         pendencia.descricao.toLowerCase().includes(searchTerm.toLowerCase()),
     )
-    // Ordenar: primeiro as urgentes, depois por data (mais antigas primeiro)
+    // Ordenar: primeiro as urgentes, depois por data (mais recentes primeiro)
     .sort((a, b) => {
       if (a.urgente !== b.urgente) return a.urgente ? -1 : 1
-      return new Date(a.data).getTime() - new Date(b.data).getTime()
+      return new Date(b.data).getTime() - new Date(a.data).getTime()
     })
+
+  // Estatísticas das pendências
+  const stats = {
+    total: pendencias.length,
+    urgentes: pendencias.filter((p) => p.urgente).length,
+    concluidas: pendencias.filter((p) => p.status === "concluido").length,
+    emAndamento: pendencias.filter((p) => p.status === "em-andamento").length,
+    naoConcluidas: pendencias.filter((p) => p.status === "nao-concluido").length,
+  }
 
   // Atualizar status de uma pendência com atualização otimista
   const atualizarStatus = async (id: number, novoStatus: string) => {
     try {
       await updateStatusOptimistic(id, novoStatus)
       toast({
-        title: "Status atualizado",
-        description: "O status da pendência foi atualizado com sucesso.",
+        title: "✅ Status atualizado",
+        description: "O status da pendência foi atualizado instantaneamente",
       })
     } catch (error) {
       console.error("Error updating status:", error)
       toast({
         title: "Erro ao atualizar status",
-        description: "Não foi possível atualizar o status da pendência. Tente novamente.",
+        description: "Não foi possível atualizar o status. Tente novamente.",
         variant: "destructive",
       })
     }
@@ -144,7 +166,10 @@ export default function PendenciasDynamic() {
     setIsDeleting(id)
     try {
       await removePendenciaOptimistic(id)
-      console.log("🗑️ Pendência removida com sucesso")
+      toast({
+        title: "🗑️ Pendência removida",
+        description: "A pendência foi removida instantaneamente",
+      })
     } catch (error) {
       console.error("Error removing pendencia:", error)
       toast({
@@ -158,7 +183,7 @@ export default function PendenciasDynamic() {
     }
   }
 
-  // Exportar pendências para Excel (simulado)
+  // Exportar pendências para CSV
   const exportarPendencias = () => {
     const headers = ["ID", "Título", "Descrição", "Status", "Urgência", "Data", "Autor"]
 
@@ -199,14 +224,28 @@ export default function PendenciasDynamic() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+
+    toast({
+      title: "📊 Exportação concluída",
+      description: "Arquivo CSV baixado com sucesso",
+    })
   }
 
   // Adicionar pendência com atualização otimista
   const handleSubmit = async () => {
+    if (!novaPendencia.titulo.trim()) {
+      toast({
+        title: "Título obrigatório",
+        description: "Por favor, insira um título para a pendência",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       await addPendenciaOptimistic({
-        titulo: novaPendencia.titulo || "Nova pendência",
-        descricao: novaPendencia.descricao || "Descrição da pendência",
+        titulo: novaPendencia.titulo.trim(),
+        descricao: novaPendencia.descricao.trim() || "Sem descrição",
         status: "nao-concluido",
         urgente: novaPendencia.urgente,
         data: new Date().toISOString(),
@@ -225,8 +264,8 @@ export default function PendenciasDynamic() {
       setIsDialogOpen(false)
 
       toast({
-        title: "Pendência adicionada",
-        description: "A pendência foi adicionada com sucesso.",
+        title: "✅ Pendência adicionada",
+        description: "A pendência foi adicionada instantaneamente à lista",
       })
     } catch (error) {
       console.error("Error adding pendencia:", error)
@@ -239,24 +278,20 @@ export default function PendenciasDynamic() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-8">
+    <div className="flex flex-col gap-6 p-4 md:p-8">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pendências Dinâmicas</h1>
-          <div className="flex items-center gap-4 mt-2">
-            <p className="text-muted-foreground">
-              Senha diária: <span className="font-bold">{dailyPassword}</span>
-            </p>
-            <DynamicStatusIndicator
-              isConnected={isConnected}
-              isLoading={isLoading}
-              lastUpdate={lastUpdate}
-              onForceRefresh={forceRefresh}
-              pollingInterval={pollingInterval}
-              enableRealtime={enableRealtime}
-              enablePolling={enablePolling}
-            />
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight">Pendências</h1>
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Zap className="h-3 w-3" />
+              Dinâmico
+            </Badge>
           </div>
+          <p className="text-muted-foreground mt-1">
+            Senha diária: <span className="font-bold text-blue-600">{dailyPassword}</span>
+          </p>
         </div>
 
         <div className="flex gap-2">
@@ -280,12 +315,14 @@ export default function PendenciasDynamic() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[525px]">
               <DialogHeader>
-                <DialogTitle>Adicionar Pendência</DialogTitle>
-                <DialogDescription>Preencha os campos abaixo para adicionar uma nova pendência.</DialogDescription>
+                <DialogTitle>Adicionar Nova Pendência</DialogTitle>
+                <DialogDescription>
+                  Preencha os campos abaixo. A pendência será adicionada instantaneamente à lista.
+                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="titulo">Título</Label>
+                  <Label htmlFor="titulo">Título *</Label>
                   <Input
                     id="titulo"
                     placeholder="Digite o título da pendência"
@@ -297,7 +334,7 @@ export default function PendenciasDynamic() {
                   <Label htmlFor="descricao">Descrição</Label>
                   <Textarea
                     id="descricao"
-                    placeholder="Descreva a pendência"
+                    placeholder="Descreva a pendência (opcional)"
                     value={novaPendencia.descricao}
                     onChange={(e) => setNovaPendencia({ ...novaPendencia, descricao: e.target.value })}
                   />
@@ -324,7 +361,7 @@ export default function PendenciasDynamic() {
                     onValueChange={(value) => setNovaPendencia({ ...novaPendencia, author: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione o autor" />
+                      <SelectValue placeholder="Selecione o autor (opcional)" />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingAuthors ? (
@@ -347,6 +384,9 @@ export default function PendenciasDynamic() {
                 </div>
               </div>
               <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancelar
+                </Button>
                 <Button type="submit" onClick={handleSubmit}>
                   Salvar Pendência
                 </Button>
@@ -361,6 +401,54 @@ export default function PendenciasDynamic() {
         </div>
       </div>
 
+      {/* Status Indicator */}
+      <EnhancedStatusIndicator
+        isConnected={isConnected}
+        isLoading={isLoading}
+        isPolling={isPolling}
+        lastUpdate={lastUpdate}
+        onForceRefresh={forceRefresh}
+        pollingInterval={pollingInterval}
+        enableRealtime={enableRealtime}
+        enablePolling={enablePolling}
+        pendenciasCount={pendencias.length}
+      />
+
+      {/* Estatísticas */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">Total</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-red-600">{stats.urgentes}</div>
+            <p className="text-xs text-muted-foreground">Urgentes</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-green-600">{stats.concluidas}</div>
+            <p className="text-xs text-muted-foreground">Concluídas</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-yellow-600">{stats.emAndamento}</div>
+            <p className="text-xs text-muted-foreground">Em Andamento</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-gray-600">{stats.naoConcluidas}</div>
+            <p className="text-xs text-muted-foreground">Não Concluídas</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Lista de Pendências */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
@@ -370,21 +458,20 @@ export default function PendenciasDynamic() {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Gerencie as pendências do dia com atualizações em tempo real. As pendências são ordenadas por urgência e
-            data.
+            Gerencie suas pendências com atualizações em tempo real. As alterações são refletidas instantaneamente.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex justify-center items-center py-8">
+            <div className="flex justify-center items-center py-12">
               <div className="w-8 h-8 border-4 border-t-blue-600 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-              <span className="ml-2">Carregando pendências...</span>
+              <span className="ml-3">Carregando pendências...</span>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">Status</TableHead>
+                  <TableHead className="w-[120px]">Status</TableHead>
                   <TableHead>Título</TableHead>
                   <TableHead className="hidden md:table-cell">Descrição</TableHead>
                   <TableHead className="hidden md:table-cell">Data</TableHead>
@@ -394,7 +481,7 @@ export default function PendenciasDynamic() {
               </TableHeader>
               <TableBody>
                 {filteredPendencias.map((pendencia) => (
-                  <TableRow key={pendencia.id} className="transition-all duration-200 hover:bg-muted/50">
+                  <TableRow key={pendencia.id} className="transition-all duration-300 hover:bg-muted/50">
                     <TableCell>
                       {pendencia.urgente && (
                         <Badge variant="destructive" className="mb-1 animate-pulse">
@@ -408,7 +495,11 @@ export default function PendenciasDynamic() {
                             Em andamento...
                           </Badge>
                         )}
-                        {pendencia.status === "concluido" && <Badge variant="default">Concluído</Badge>}
+                        {pendencia.status === "concluido" && (
+                          <Badge variant="default" className="bg-green-600">
+                            Concluído
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{pendencia.titulo}</TableCell>
@@ -485,7 +576,7 @@ export default function PendenciasDynamic() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Remover pendência</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Tem certeza que deseja remover esta pendência? Esta ação não pode ser desfeita.
+                                Tem certeza que deseja remover "{pendencia.titulo}"? Esta ação não pode ser desfeita.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -506,13 +597,17 @@ export default function PendenciasDynamic() {
 
                 {filteredPendencias.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={6} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center">
-                        <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                        <p>Nenhuma pendência encontrada.</p>
-                        {searchTerm && (
+                        <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                        <p className="text-lg font-medium">Nenhuma pendência encontrada</p>
+                        {searchTerm ? (
                           <p className="text-sm text-muted-foreground mt-1">
-                            Tente ajustar sua pesquisa ou adicione uma nova pendência.
+                            Tente ajustar sua pesquisa ou adicione uma nova pendência
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Comece adicionando sua primeira pendência
                           </p>
                         )}
                       </div>

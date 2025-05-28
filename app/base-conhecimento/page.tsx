@@ -53,7 +53,7 @@ const categories = [
 
 export default function BaseConhecimento() {
   const router = useRouter()
-  const { setFaqs, addFaq, autores, fetchAutores, subscribeToAuthors } = useAppStore()
+  const { autores, fetchAutores, subscribeToAuthors } = useAppStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [activeCategory, setActiveCategory] = useState("all")
   const [selectedFaq, setSelectedFaq] = useState(null)
@@ -62,6 +62,8 @@ export default function BaseConhecimento() {
   const [isLoadingAuthors, setIsLoadingAuthors] = useState(true)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
   const [faqToDelete, setFaqToDelete] = useState<number | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     title: "",
@@ -145,17 +147,41 @@ export default function BaseConhecimento() {
   }, [])
 
   const handleSubmit = async () => {
-    try {
-      // Adicionar o novo FAQ
-      await addFaq({
-        title: formData.title || "Novo FAQ",
-        category: formData.category,
-        description: formData.description || "Descrição do novo FAQ",
-        author: formData.author,
-        images: formData.images,
+    if (!formData.title || !formData.category) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha o título e selecione uma categoria.",
+        variant: "destructive",
       })
+      return
+    }
 
-      // Resetar o formulário
+    setIsSubmitting(true)
+    try {
+      const supabase = getSupabaseClient()
+
+      // Prepare the data object without any ID field
+      const faqData = {
+        title: formData.title.trim(),
+        category: formData.category,
+        description: formData.description?.trim() || "",
+        author: formData.author || null,
+        images: formData.images && formData.images.length > 0 ? formData.images : null,
+      }
+
+      console.log("Inserting FAQ data:", faqData)
+
+      // Insert FAQ without specifying ID - let database auto-generate
+      const { data, error } = await supabase.from("faqs").insert(faqData).select()
+
+      if (error) {
+        console.error("Supabase error:", error)
+        throw error
+      }
+
+      console.log("FAQ inserted successfully:", data)
+
+      // Reset form
       setFormData({
         title: "",
         category: "",
@@ -164,8 +190,8 @@ export default function BaseConhecimento() {
         images: [],
       })
 
-      // Fechar o diálogo
-      document.querySelector('[data-state="open"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+      // Close dialog
+      setDialogOpen(false)
 
       toast({
         title: "FAQ adicionado",
@@ -175,9 +201,11 @@ export default function BaseConhecimento() {
       console.error("Error adding FAQ:", error)
       toast({
         title: "Erro ao adicionar FAQ",
-        description: "Não foi possível adicionar o FAQ. Tente novamente.",
+        description: error.message || "Não foi possível adicionar o FAQ. Tente novamente.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -229,7 +257,7 @@ export default function BaseConhecimento() {
             />
           </div>
 
-          <Dialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -246,7 +274,7 @@ export default function BaseConhecimento() {
               <div className="flex-1 overflow-y-auto pr-1 my-4">
                 <div className="grid gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="title">Título</Label>
+                    <Label htmlFor="title">Título *</Label>
                     <Input
                       id="title"
                       placeholder="Digite o título do FAQ"
@@ -255,7 +283,7 @@ export default function BaseConhecimento() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="category">Categoria</Label>
+                    <Label htmlFor="category">Categoria *</Label>
                     <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione uma categoria" />
@@ -315,8 +343,12 @@ export default function BaseConhecimento() {
                 </div>
               </div>
               <DialogFooter className="pt-2 border-t">
-                <Button type="submit" onClick={handleSubmit} disabled={!formData.title || !formData.category}>
-                  Salvar FAQ
+                <Button
+                  type="submit"
+                  onClick={handleSubmit}
+                  disabled={!formData.title || !formData.category || isSubmitting}
+                >
+                  {isSubmitting ? "Salvando..." : "Salvar FAQ"}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -7,6 +7,7 @@ export interface FAQ {
   category: string
   description: string
   author: string
+  images?: any[]
   created_at: string
   updated_at: string
 }
@@ -17,7 +18,8 @@ export interface Pendencia {
   descricao: string
   status: "pendente" | "em-andamento" | "concluida"
   urgente: boolean
-  autor: string
+  data: string
+  author: string
   created_at: string
   updated_at: string
 }
@@ -28,7 +30,9 @@ export interface Acesso {
   maquina: string
   usuario: string
   senha: string
-  observacoes?: string
+  adquirente?: string
+  trabalho_andamento?: string
+  status_maquininha?: string
   created_at: string
   updated_at: string
 }
@@ -101,12 +105,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addFaq: async (faq) => {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase.from("faqs").insert([faq]).select().single()
+
+    // Prepare clean data object without ID
+    const cleanFaqData = {
+      title: faq.title,
+      category: faq.category,
+      description: faq.description || "",
+      author: faq.author || null,
+      images: faq.images || null,
+    }
+
+    console.log("Store: Inserting FAQ data:", cleanFaqData)
+
+    const { data, error } = await supabase.from("faqs").insert(cleanFaqData).select().single()
 
     if (error) {
-      console.error("Error adding FAQ:", error)
+      console.error("Store: Error adding FAQ:", error)
       throw error
     }
+
+    console.log("Store: FAQ inserted successfully:", data)
 
     set((state) => ({
       faqs: [data, ...state.faqs],
@@ -190,7 +208,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addPendencia: async (pendencia) => {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase.from("pendencias").insert([pendencia]).select().single()
+    const { data, error } = await supabase
+      .from("pendencias")
+      .insert([
+        {
+          titulo: pendencia.titulo,
+          descricao: pendencia.descricao,
+          status: pendencia.status,
+          urgente: pendencia.urgente,
+          data: pendencia.data,
+          author: pendencia.author,
+        },
+      ])
+      .select()
+      .single()
 
     if (error) {
       console.error("Error adding pendência:", error)
@@ -279,12 +310,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addAcesso: async (acesso) => {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase.from("acessos").insert([acesso]).select().single()
+
+    // Prepare clean data object without ID
+    const cleanAcessoData = {
+      posto: acesso.posto?.trim() || "",
+      maquina: acesso.maquina?.trim() || "",
+      usuario: acesso.usuario?.trim() || "",
+      senha: acesso.senha?.trim() || "",
+      adquirente: acesso.adquirente?.trim() || null,
+      trabalho_andamento: acesso.trabalho_andamento?.trim() || null,
+      status_maquininha: acesso.status_maquininha?.trim() || null,
+    }
+
+    console.log("Store: Inserting acesso data:", cleanAcessoData)
+
+    const { data, error } = await supabase.from("acessos").insert(cleanAcessoData).select().single()
 
     if (error) {
-      console.error("Error adding acesso:", error)
+      console.error("Store: Error adding acesso:", error)
       throw error
     }
+
+    console.log("Store: Acesso inserted successfully:", data)
 
     set((state) => ({
       acessos: [data, ...state.acessos],
@@ -368,7 +415,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addAuthor: async (author) => {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase.from("authors").insert([author]).select().single()
+    const { data, error } = await supabase
+      .from("authors")
+      .insert([
+        {
+          name: author.name,
+        },
+      ])
+      .select()
+      .single()
 
     if (error) {
       console.error("Error adding author:", error)

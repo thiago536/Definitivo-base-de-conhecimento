@@ -41,6 +41,9 @@ export default function Acessos() {
   const [acessoToDelete, setAcessoToDelete] = useState<number | null>(null)
   const { toast } = useToast()
 
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+
   const [novoAcesso, setNovoAcesso] = useState({
     posto: "",
     maquina: "",
@@ -126,18 +129,62 @@ export default function Acessos() {
 
   const handleSubmit = async () => {
     try {
-      // Adicionar novo acesso
-      await addAcesso({
-        posto: novoAcesso.posto || "Novo Posto",
-        maquina: novoAcesso.maquina || "Nova Máquina",
-        usuario: novoAcesso.usuario || "novo_usuario",
-        senha: novoAcesso.senha || "senha123",
-        adquirente: novoAcesso.adquirente || "Novo Adquirente",
-        trabalhoAndamento: novoAcesso.trabalhoAndamento || "Nenhum",
-        statusMaquininha: novoAcesso.statusMaquininha || "Não configurada",
-      })
+      setIsSubmitting(true)
 
-      // Resetar formulário
+      // Validate required fields
+      if (!novoAcesso.posto.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "O nome do posto é obrigatório.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!novoAcesso.maquina.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "O nome da máquina é obrigatório.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!novoAcesso.usuario.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "O usuário é obrigatório.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!novoAcesso.senha.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "A senha é obrigatória.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Prepare clean data
+      const acessoData = {
+        posto: novoAcesso.posto.trim(),
+        maquina: novoAcesso.maquina.trim(),
+        usuario: novoAcesso.usuario.trim(),
+        senha: novoAcesso.senha.trim(),
+        adquirente: novoAcesso.adquirente.trim() || null,
+        trabalho_andamento: novoAcesso.trabalhoAndamento.trim() || null,
+        status_maquininha: novoAcesso.statusMaquininha.trim() || null,
+      }
+
+      console.log("Component: Adding acesso with data:", acessoData)
+
+      // Add acesso using store function
+      await addAcesso(acessoData)
+
+      // Reset form
       setNovoAcesso({
         posto: "",
         maquina: "",
@@ -148,20 +195,22 @@ export default function Acessos() {
         statusMaquininha: "",
       })
 
-      // Fechar o diálogo
-      document.querySelector('[data-state="open"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+      // Close dialog
+      setIsDialogOpen(false)
 
       toast({
         title: "Acesso adicionado",
         description: "O acesso foi adicionado com sucesso.",
       })
     } catch (error) {
-      console.error("Error adding acesso:", error)
+      console.error("Component: Error adding acesso:", error)
       toast({
         title: "Erro ao adicionar acesso",
         description: "Não foi possível adicionar o acesso. Tente novamente.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -218,9 +267,9 @@ export default function Acessos() {
             />
           </div>
 
-          <Dialog>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => setIsDialogOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Cadastrar Acesso
               </Button>
@@ -297,8 +346,8 @@ export default function Acessos() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" onClick={handleSubmit}>
-                  Salvar Acesso
+                <Button type="submit" onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? "Salvando..." : "Salvar Acesso"}
                 </Button>
               </DialogFooter>
             </DialogContent>
