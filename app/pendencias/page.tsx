@@ -20,7 +20,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useAppStore } from "@/lib/store"
-import { getSupabaseClient } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -33,21 +32,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useSupabaseRealtime } from "@/hooks/use-supabase-realtime"
-import { RealtimeStatus } from "@/components/realtime-status"
+import { useDynamicPendencias } from "@/hooks/use-dynamic-pendencias"
+import { DynamicStatusIndicator } from "@/components/dynamic-status-indicator"
 
-interface Pendencia {
-  id: number
-  titulo: string
-  descricao: string
-  status: string
-  urgente: boolean
-  data: string
-  author: string | null
-}
-
-export default function Pendencias() {
-  const { addPendencia, updatePendenciaStatus, autores, fetchAutores, subscribeToAuthors } = useAppStore()
+export default function PendenciasDynamic() {
+  const { autores, fetchAutores, subscribeToAuthors } = useAppStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [dailyPassword, setDailyPassword] = useState("")
   const [novaPendencia, setNovaPendencia] = useState({
@@ -59,7 +48,27 @@ export default function Pendencias() {
   const [isLoadingAuthors, setIsLoadingAuthors] = useState(true)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
   const [pendenciaToDelete, setPendenciaToDelete] = useState<number | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const { toast } = useToast()
+
+  // Hook dinâmico para pendências
+  const {
+    pendencias,
+    isLoading,
+    isConnected,
+    lastUpdate,
+    forceRefresh,
+    addPendenciaOptimistic,
+    updateStatusOptimistic,
+    removePendenciaOptimistic,
+    pollingInterval,
+    enableRealtime,
+    enablePolling,
+  } = useDynamicPendencias({
+    pollingInterval: 30000, // 30 segundos
+    enableRealtime: true,
+    enablePolling: true,
+  })
 
   // Calcular a senha diária
   useEffect(() => {
@@ -74,40 +83,6 @@ export default function Pendencias() {
 
     setDailyPassword(password)
   }, [])
-
-  // Use the realtime hook for pendencias with correct ordering
-  const {
-    data: pendencias,
-    setData: setPendencias,
-    isLoading,
-    isConnected,
-    error: realtimeError,
-  } = useSupabaseRealtime<Pendencia>({
-    table: "pendencias",
-    orderBy: "data", // Use 'data' column for pendencias
-    orderAscending: false, // Most recent first
-    onInsert: (newPendencia) => {
-      console.log("✅ Nova pendência adicionada:", newPendencia.titulo)
-      toast({
-        title: "Nova pendência adicionada",
-        description: `"${newPendencia.titulo}" foi adicionada à lista.`,
-      })
-    },
-    onUpdate: (updatedPendencia) => {
-      console.log("📝 Pendência atualizada:", updatedPendencia.titulo)
-      toast({
-        title: "Pendência atualizada",
-        description: `"${updatedPendencia.titulo}" foi atualizada.`,
-      })
-    },
-    onDelete: (deletedId) => {
-      console.log("🗑️ Pendência removida:", deletedId)
-      toast({
-        title: "Pendência removida",
-        description: "A pendência foi removida da lista.",
-      })
-    },
-  })
 
   // Carregar autores separadamente
   useEffect(() => {
@@ -146,10 +121,10 @@ export default function Pendencias() {
       return new Date(a.data).getTime() - new Date(b.data).getTime()
     })
 
-  // Atualizar status de uma pendência
+  // Atualizar status de uma pendência com atualização otimista
   const atualizarStatus = async (id: number, novoStatus: string) => {
     try {
-      await updatePendenciaStatus(id, novoStatus)
+      await updateStatusOptimistic(id, novoStatus)
       toast({
         title: "Status atualizado",
         description: "O status da pendência foi atualizado com sucesso.",
@@ -164,17 +139,11 @@ export default function Pendencias() {
     }
   }
 
+  // Remover pendência com atualização otimista
   const removerPendencia = async (id: number) => {
     setIsDeleting(id)
     try {
-      const supabase = getSupabaseClient()
-      const { error } = await supabase.from("pendencias").delete().eq("id", id)
-
-      if (error) {
-        throw error
-      }
-
-      // O estado será atualizado automaticamente pelo realtime
+      await removePendenciaOptimistic(id)
       console.log("🗑️ Pendência removida com sucesso")
     } catch (error) {
       console.error("Error removing pendencia:", error)
@@ -191,10 +160,8 @@ export default function Pendencias() {
 
   // Exportar pendências para Excel (simulado)
   const exportarPendencias = () => {
-    // Criar conteúdo CSV com formatação melhorada
     const headers = ["ID", "Título", "Descrição", "Status", "Urgência", "Data", "Autor"]
 
-    // Função para formatar o status
     const formatarStatus = (status: string) => {
       switch (status) {
         case "nao-concluido":
@@ -223,7 +190,6 @@ export default function Pendencias() {
       ),
     ].join("\n")
 
-    // Criar blob e link para download
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -235,10 +201,10 @@ export default function Pendencias() {
     document.body.removeChild(link)
   }
 
+  // Adicionar pendência com atualização otimista
   const handleSubmit = async () => {
     try {
-      // Criar nova pendência
-      await addPendencia({
+      await addPendenciaOptimistic({
         titulo: novaPendencia.titulo || "Nova pendência",
         descricao: novaPendencia.descricao || "Descrição da pendência",
         status: "nao-concluido",
@@ -256,7 +222,7 @@ export default function Pendencias() {
       })
 
       // Fechar o diálogo
-      document.querySelector('[data-state="open"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+      setIsDialogOpen(false)
 
       toast({
         title: "Pendência adicionada",
@@ -276,12 +242,20 @@ export default function Pendencias() {
     <div className="flex flex-col gap-4 p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pendências</h1>
-          <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight">Pendências Dinâmicas</h1>
+          <div className="flex items-center gap-4 mt-2">
             <p className="text-muted-foreground">
               Senha diária: <span className="font-bold">{dailyPassword}</span>
             </p>
-            <RealtimeStatus isConnected={isConnected} isLoading={isLoading} tableName="Pendências" />
+            <DynamicStatusIndicator
+              isConnected={isConnected}
+              isLoading={isLoading}
+              lastUpdate={lastUpdate}
+              onForceRefresh={forceRefresh}
+              pollingInterval={pollingInterval}
+              enableRealtime={enableRealtime}
+              enablePolling={enablePolling}
+            />
           </div>
         </div>
 
@@ -297,7 +271,7 @@ export default function Pendencias() {
             />
           </div>
 
-          <Dialog>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -389,9 +363,15 @@ export default function Pendencias() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>Lista de Pendências</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            Lista de Pendências
+            <Badge variant="outline" className="ml-2">
+              {filteredPendencias.length} {filteredPendencias.length === 1 ? "item" : "itens"}
+            </Badge>
+          </CardTitle>
           <CardDescription>
-            Gerencie as pendências do dia. As pendências são ordenadas por urgência e data.
+            Gerencie as pendências do dia com atualizações em tempo real. As pendências são ordenadas por urgência e
+            data.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -414,10 +394,10 @@ export default function Pendencias() {
               </TableHeader>
               <TableBody>
                 {filteredPendencias.map((pendencia) => (
-                  <TableRow key={pendencia.id}>
+                  <TableRow key={pendencia.id} className="transition-all duration-200 hover:bg-muted/50">
                     <TableCell>
                       {pendencia.urgente && (
-                        <Badge variant="destructive" className="mb-1">
+                        <Badge variant="destructive" className="mb-1 animate-pulse">
                           Urgente
                         </Badge>
                       )}
@@ -432,7 +412,7 @@ export default function Pendencias() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{pendencia.titulo}</TableCell>
-                    <TableCell className="hidden md:table-cell">{pendencia.descricao}</TableCell>
+                    <TableCell className="hidden md:table-cell max-w-xs truncate">{pendencia.descricao}</TableCell>
                     <TableCell className="hidden md:table-cell">
                       {new Date(pendencia.data).toLocaleString("pt-BR", {
                         day: "2-digit",

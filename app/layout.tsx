@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toaster"
 import { RealtimeDataProvider } from "@/components/realtime-data-provider"
+import { MobileHeader } from "@/components/mobile-header"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -28,8 +29,19 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <RealtimeDataProvider>
             <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset>{children}</SidebarInset>
+              {/* Sidebar fixo para desktop */}
+              <div className="hidden lg:block">
+                <AppSidebar />
+              </div>
+
+              <SidebarInset className="lg:ml-0">
+                {/* Header móvel com menu hambúrguer */}
+                <MobileHeader />
+
+                {/* Conteúdo principal */}
+                <main className="flex-1">{children}</main>
+              </SidebarInset>
+
               <Toaster />
             </SidebarProvider>
           </RealtimeDataProvider>

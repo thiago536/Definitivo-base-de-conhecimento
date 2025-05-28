@@ -45,7 +45,11 @@ export const categoryIcons = {
   pinpad: CreditCard,
 }
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavigate?: () => void // Callback para fechar o menu mobile
+}
+
+export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const pathname = usePathname()
   const [dailyPassword, setDailyPassword] = useState("")
 
@@ -91,11 +95,16 @@ export function AppSidebar() {
     },
   ]
 
+  const handleNavigation = () => {
+    // Chama o callback para fechar o menu mobile quando necessário
+    onNavigate?.()
+  }
+
   return (
     <Sidebar className="border-r border-blue-100 dark:border-blue-900">
       <SidebarHeader>
         <div className="flex h-14 items-center border-b border-blue-100 dark:border-blue-900 px-6 bg-blue-50 dark:bg-blue-950">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+          <Link href="/" className="flex items-center gap-2 font-semibold" onClick={handleNavigation}>
             <BarChart3 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             <span className="text-xl text-blue-700 dark:text-blue-300">E-PROSYS</span>
           </Link>
@@ -111,7 +120,7 @@ export function AppSidebar() {
                   isActive={pathname === item.href}
                   className="hover:bg-blue-100 dark:hover:bg-blue-900/40"
                 >
-                  <Link href={item.href}>
+                  <Link href={item.href} onClick={handleNavigation}>
                     <item.icon
                       className={`h-5 w-5 ${pathname === item.href ? "text-blue-600 dark:text-blue-400" : ""}`}
                     />
